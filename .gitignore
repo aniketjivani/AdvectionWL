@@ -1,1 +1,6 @@
 *~
+_output
+_plots
+*.log
+.ipynb_checkpoints/
+__pycache__/

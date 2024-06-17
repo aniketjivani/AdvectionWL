@@ -155,6 +155,9 @@ def setup(use_petsc=False,outdir='./_output',solver_type='classic'):
     solver.bc_lower[1] = pyclaw.BC.periodic
     solver.bc_upper[1] = pyclaw.BC.periodic
 
+    # solver.aux_bc_lower[0] = pyclaw.BC.extrap
+    # solver.aux_bc_upper[0] = pyclaw.BC.extrap
+
     solver.aux_bc_lower[0] = pyclaw.BC.custom
     solver.aux_bc_upper[0] = pyclaw.BC.custom
     solver.user_aux_bc_lower = ghost_velocities_lower

@@ -1,26 +1,13 @@
-#!/usr/bin/env python
-# encoding: utf-8
-
-# Source: https://www.clawpack.org/gallery/pyclaw/gallery/advection_annulus.html
-
-r"""
-Advection in an annular domain
-==============================
-
-Solve the linear non-conservative advection equation:
-
-.. math::
-    q_t + u(x,y) q_x + v(x,y) q_y = 0
-
-in an annular domain, using a mapped grid.
-
-Here q is the density of some quantity and (u,v) is the velocity
-field.  We take a rotational velocity field: :math:`u = \cos(\theta), v = \sin(\theta)`.
-
-This is the simplest example that shows how to use a mapped grid in PyClaw.
-However, it doesn't use a mapped-grid Riemann solver.
-"""
+# %%
 import numpy as np
+from clawpack import riemann
+import os
+from matplotlib import colormaps as cm
+
+raw_data = np.load("/home/ajivani/WLROM_new/WhiteLight/validation_data/CR2161_validation_PolarTensor.npy")
+raw_data.shape
+
+sample_rd = raw_data[:126, :, 25, 20]
 
 def mapc2p_annulus(xc, yc):
     """
@@ -57,44 +44,49 @@ def qinit(state):
     r2     = 0.5   # r-coordinate of the centers
     theta2 = 0.    # theta-coordinate of the centers
 
+    # R, Theta = state.grid.p_centers
+    # state.q[0,:,:] = A1*np.exp(-beta1*(np.square(R-r1) + np.square(Theta-theta1)))\
+    #                + A2*np.exp(-beta2*(np.square(R-r2) + np.square(Theta-theta2)))
+
     R, Theta = state.grid.p_centers
-    state.q[0,:,:] = A1*np.exp(-beta1*(np.square(R-r1) + np.square(Theta-theta1)))\
-                   + A2*np.exp(-beta2*(np.square(R-r2) + np.square(Theta-theta2)))
+    state.q[0,:,:] = A1*np.exp(-beta1*(np.square(R-r1) + np.square(Theta-theta1)))
+
+    # state.q[0,:,:] = sample_rd
 
 
-# def ghost_velocities_upper(state,dim,t,qbc,auxbc,num_ghost):
-#     """
-#     Set the velocities for the ghost cells outside the outer radius of the annulus.
-#     In the computational domain, these are the cells at the top of the grid.
-#     """
-#     grid=state.grid
-#     if dim == grid.dimensions[0]:
-#         dx, dy = grid.delta
-#         R_nodes,Theta_nodes = grid.p_nodes_with_ghost(num_ghost=2)
+def ghost_velocities_upper(state,dim,t,qbc,auxbc,num_ghost):
+    """
+    Set the velocities for the ghost cells outside the outer radius of the annulus.
+    In the computational domain, these are the cells at the top of the grid.
+    """
+    grid=state.grid
+    if dim == grid.dimensions[0]:
+        dx, dy = grid.delta
+        R_nodes,Theta_nodes = grid.p_nodes_with_ghost(num_ghost=2)
 
-#         auxbc[:,-num_ghost:,:] = edge_velocities_and_area(R_nodes[-num_ghost-1:,:],Theta_nodes[-num_ghost-1:,:],dx,dy)
+        auxbc[:,-num_ghost:,:] = edge_velocities_and_area(R_nodes[-num_ghost-1:,:],Theta_nodes[-num_ghost-1:,:],dx,dy)
 
-#     else:
-#         raise Exception('Custom BC for this boundary is not appropriate!')
-
-
-# def ghost_velocities_lower(state,dim,t,qbc,auxbc,num_ghost):
-#     """
-#     Set the velocities for the ghost cells outside the inner radius of the annulus.
-#     In the computational domain, these are the cells at the bottom of the grid.
-#     """
-#     grid=state.grid
-#     if dim == grid.dimensions[0]:
-#         dx, dy = grid.delta
-#         R_nodes,Theta_nodes = grid.p_nodes_with_ghost(num_ghost=2)
-
-#         auxbc[:,0:num_ghost,:] = edge_velocities_and_area(R_nodes[0:num_ghost+1,:],Theta_nodes[0:num_ghost+1,:],dx,dy)
-
-#     else:
-#         raise Exception('Custom BC for this boundary is not appropriate!')
+    else:
+        raise Exception('Custom BC for this boundary is not appropriate!')
 
 
-def edge_velocities_and_area(R_nodes,Theta_nodes,dx,dy):
+def ghost_velocities_lower(state,dim,t,qbc,auxbc,num_ghost):
+    """
+    Set the velocities for the ghost cells outside the inner radius of the annulus.
+    In the computational domain, these are the cells at the bottom of the grid.
+    """
+    grid=state.grid
+    if dim == grid.dimensions[0]:
+        dx, dy = grid.delta
+        R_nodes,Theta_nodes = grid.p_nodes_with_ghost(num_ghost=2)
+
+        auxbc[:,0:num_ghost,:] = edge_velocities_and_area(R_nodes[0:num_ghost+1,:],Theta_nodes[0:num_ghost+1,:],dx,dy)
+
+    else:
+        raise Exception('Custom BC for this boundary is not appropriate!')
+
+
+def edge_velocities_and_area(R_nodes, Theta_nodes, dx, dy):
     """This routine fills in the aux arrays for the problem:
 
         aux[0,i,j] = u-velocity at left edge of cell (i,j)
@@ -117,13 +109,16 @@ def edge_velocities_and_area(R_nodes,Theta_nodes,dx,dy):
     Xp2 = R_nodes[1:,1:]
     Yp2 = Theta_nodes[1:,1:]
 
-    # Top-left corners
+    # Top-left corners(bottom right?)
     Xp3 = R_nodes[1:,:my]
     Yp3 = Theta_nodes[1:,:my]
+    u0 = 2.5
+    u1 = 1.5
+    #     u1 = 50
 
-    # Compute velocity component
-    aux[0,:mx,:my] = (stream(Xp1,Yp1)- stream(Xp0,Yp0))/dy
-    aux[1,:mx,:my] = -(stream(Xp3,Yp3)- stream(Xp0,Yp0))/dx
+    aux[0, :mx, :my] = u0 * (Xp1 / (np.sqrt(Xp1**2 + Yp1**2))) + u1 * Xp1
+    aux[1, :mx, :my] = u0 * (Yp3 / (np.sqrt(Xp3**2 + Yp3**2))) + u1 * Yp3
+
 
     # Compute area of the physical element
     area = 1./2.*( (Yp0+Yp1)*(Xp1-Xp0) +
@@ -135,15 +130,6 @@ def edge_velocities_and_area(R_nodes,Theta_nodes,dx,dy):
     aux[2,:mx,:my] = area/(dx*dy)
 
     return aux
-
-    
-def stream(Xp,Yp):
-    """ 
-    Calculates the stream function in physical space.
-    Clockwise rotation. One full rotation corresponds to 1 (second).
-    """
-    return np.pi*(Xp**2 + Yp**2)
-
 
 def setup(use_petsc=False,outdir='./_output',solver_type='classic'):
     from clawpack import riemann
@@ -166,10 +152,12 @@ def setup(use_petsc=False,outdir='./_output',solver_type='classic'):
     solver.bc_lower[1] = pyclaw.BC.periodic
     solver.bc_upper[1] = pyclaw.BC.periodic
 
-    solver.aux_bc_lower[0] = pyclaw.BC.custom
-    solver.aux_bc_upper[0] = pyclaw.BC.custom
-    solver.user_aux_bc_lower = ghost_velocities_lower
-    solver.user_aux_bc_upper = ghost_velocities_upper
+    solver.aux_bc_lower[0] = pyclaw.BC.extrap
+    solver.aux_bc_upper[0] = pyclaw.BC.extrap
+    # solver.aux_bc_lower[0] = pyclaw.BC.custom
+    # solver.aux_bc_upper[0] = pyclaw.BC.custom
+    # solver.user_aux_bc_lower = ghost_velocities_lower
+    # solver.user_aux_bc_upper = ghost_velocities_upper
     solver.aux_bc_lower[1] = pyclaw.BC.periodic
     solver.aux_bc_upper[1] = pyclaw.BC.periodic
 
@@ -224,6 +212,14 @@ def setplot(plotdata):
 
     plotdata.clearfigures()  # clear any old figures,axes,items data
     plotdata.mapc2p = mapc2p
+    # plotdata.plotdir = '_plots_wl'
+    # plotdata.plotdir = '_plots_wl_theta'
+    # plotdata.plotdir = '_plots_wl_k1pt5'
+    # plotdata.plotdir = '_plots_wl_krktheta'
+    # plotdata.plotdir = '_plots_nostream'
+    plotdata.plotdir = '_plots_blob_nostream'
+
+
     
     # Figure for contour plot
     plotfigure = plotdata.new_plotfigure(name='contour', figno=0)
@@ -256,11 +252,33 @@ def setplot(plotdata):
     # Set up for item on these axes:
     plotitem = plotaxes.new_plotitem(plot_type='2d_pcolor')
     plotitem.plot_var = 0
-    plotitem.pcolor_cmap = colormaps.red_yellow_blue
-    plotitem.pcolor_cmin = -1.
-    plotitem.pcolor_cmax = 1.
+    cmap = cm.get_cmap('viridis')
+    plotitem.pcolor_cmap = cmap
+    # plotitem.pcolor_cmin = -1.
+    # plotitem.pcolor_cmax = 1.
     plotitem.add_colorbar = True
     plotitem.MappedGrid = True
 
 
     return plotdata
+
+# %%
+pyclaw_kwargs = {'use_petsc':False,
+                'outdir':'./_output',
+                'solver_type':'classic'}
+
+clawSolution = setup()
+
+status = clawSolution.run()
+status
+
+# %%
+from clawpack import pyclaw
+
+outdir = pyclaw_kwargs.get('outdir','./_output')
+htmlplot = pyclaw_kwargs.get('htmlplot',False) # return False if key doesn't exist
+iplot    = pyclaw_kwargs.get('iplot',False)
+outdir, htmlplot, iplot
+
+pyclaw.plot.html_plot(outdir=outdir,setplot=setplot)
+# %%

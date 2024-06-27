@@ -36,11 +36,27 @@ def qinit(state):
     A1     = 1.    # Amplitude
     beta1  = 40.   # Decay factor
     r1     = -0.5  # r-coordinate of the center
-    theta1 = 0.    # theta-coordinate of the center
+    theta1 = np.pi/3    # theta-coordinate of the center
+    # theta1 = 0.0
+    # theta1 = np.pi/2
+
+    # Second gaussian pulse
+    A2     = 1.   # Amplitude
+    beta2  = 40.   # Decay factor
+    r2     = 0.5   # r-coordinate of the centers
+    theta2 = np.pi/3    # theta-coordinate of the centers
+    # theta2 = 0.0
+    # theta2 = np.pi/2
 
     X, Y = state.grid.p_centers
-    state.q[0,:,:] = A1*np.exp(-beta1*(np.square(X-r1) + np.square(Y-theta1)))
-                #    + A2*np.exp(-beta2*(np.square(R-r2) + np.square(Theta-theta2)))
+    if theta1 == 0 and theta2 == 0:
+        z =  A1*np.exp(-beta1*(np.square(X-r1) + np.square(Y-theta1))) + A2*np.exp(-beta2*(np.square(X-r2) + np.square(Y-theta2)))
+        z = (z - z.min()) / (z.max() - z.min())
+        state.q[0, :, :] = z
+    else:
+        z =  A1*np.exp(-beta1*(np.square(X-r1*np.cos(theta1)) + np.square(Y-r1*np.sin(theta1)))) + A2*np.exp(-beta2*(np.square(X-r2*np.cos(theta2)) + np.square(Y-r2 * np.sin(theta2))))
+        z = (z - z.min()) / (z.max() - z.min())
+        state.q[0, :, :] = z
 
 def auxinit(state):
     # Initialize petsc Structures for aux
@@ -53,6 +69,7 @@ def auxinit(state):
     my = rnodes.shape[1] - 1
 
     u0 = 0.5 # imagine radial velocity is fixed and doesn't change with r for case 1.
+    u1 = 0.5
 
     # state.aux[0, :, :] = 0.0
     # state.aux[1, :, :] = np.sin(2.*np.pi*X)+2
@@ -80,9 +97,28 @@ def auxinit(state):
                    (Yp2+Yp3)*(Xp3-Xp2) +
                    (Yp3+Yp0)*(Xp0-Xp3) )
     
-    state.aux[0, :, :] = -u0 * X / np.sqrt(X**2 + Y**2)
-    state.aux[1, :, :] = -u0 * Y / np.sqrt(X**2 + Y**2)
+    state.aux[0, :, :] = u1 * np.sqrt(X**2 + Y**2)
+    # state.aux[0, :, :] = u0
+    state.aux[1, :, :] = 0
+    # state.aux[1, :, :] = u0 * Y / np.sqrt(X**2 + Y**2)
+    # rrr = np.sqrt(X**2 + Y**2)
+
+    # u = np.zeros_like(X)
+    # u[X >=0] = u0 * X[X >=0] / rrr[X >=0]
+    # u[X < 0] = -u0 * X[X < 0] / rrr[X < 0]
+
+    # v = np.zeros_like(Y)
+    # v[Y >=0] = u0 * Y[Y >=0] / rrr[Y >=0]
+    # v[Y < 0] = -u0 * Y[Y < 0] / rrr[Y < 0]
+
+    # state.aux[0, :, :] = u
+    # state.aux[1, :, :] = v
+
+    # state.aux[0, :, :] = u0 * X / np.sqrt(X**2 + Y**2)
+    # state.aux[1, :, :] = u0 * Y / np.sqrt(X**2 + Y**2)
     state.aux[2, :, :] = area / (dx * dy)
+     # Calculate cell areas in curvilinear coordinates for capacity function
+    # this needs to be updated if cells aren't uniform in physical space
 
 def setup(use_petsc=False,outdir='./_output',solver_type='classic'):
     from clawpack import riemann
@@ -97,18 +133,19 @@ def setup(use_petsc=False,outdir='./_output',solver_type='classic'):
     solver.dimensional_split = False
     solver.transverse_waves = 2
     solver.order = 2
-    solver.limiters = pyclaw.limiters.tvd.vanleer
+    # solver.limiters = pyclaw.limiters.tvd.vanleer
+    solver.limiters = pyclaw.limiters.tvd.MC
 
     # solver.bc_lower[0] = pyclaw.BC.extrap
     # solver.bc_upper[0] = pyclaw.BC.extrap
 
-    # solver.bc_lower[0] = pyclaw.BC.periodic
-    # solver.bc_upper[0] = pyclaw.BC.periodic
+    solver.bc_lower[0] = pyclaw.BC.extrap
+    solver.bc_upper[0] = pyclaw.BC.extrap
     # solver.aux_bc_lower[0] = pyclaw.BC.periodic
     # solver.aux_bc_upper[0] = pyclaw.BC.periodic
 
-    solver.bc_lower[0] = pyclaw.BC.extrap
-    solver.bc_upper[0] = pyclaw.BC.extrap
+    # solver.bc_lower[0] = pyclaw.BC.extrap
+    # solver.bc_upper[0] = pyclaw.BC.extrap
     solver.aux_bc_lower[0] = pyclaw.BC.extrap
     solver.aux_bc_upper[0] = pyclaw.BC.extrap
 
@@ -137,11 +174,11 @@ def setup(use_petsc=False,outdir='./_output',solver_type='classic'):
 
     r_lower = 0.2
     r_upper = 1.0
-    m_r = 200
+    m_r = 100
 
     theta_lower = 0.0
     theta_upper = np.pi*2.0
-    m_theta = 400
+    m_theta = 200
 
     r = pyclaw.Dimension(r_lower, r_upper, m_r, name='x')
     theta = pyclaw.Dimension(theta_lower, theta_upper, m_theta, name='y')
@@ -226,7 +263,16 @@ def setplot(plotdata):
     # plotdata.plotdir = '_plots_2d_var_cartesian3'
     # plotdata.plotdir = '_plots_2d_var_annular1'
     # plotdata.plotdir = '_plots_2d_var_annular2'
-    plotdata.plotdir = '_plots_2d_var_annular3'
+    # plotdata.plotdir = '_plots_2d_var_annular3'
+    # plotdata.plotdir = '_plots_2d_var_annular4'
+    # plotdata.plotdir = '_plots_2d_var_annular5'
+    # plotdata.plotdir = '_plots_2d_var_annular6'
+    # plotdata.plotdir = '_plots_2d_var_annular7'
+    # plotdata.plotdir = '_plots_2d_var_annular8'
+    # plotdata.plotdir = '_plots_2d_var_annular9'
+    # plotdata.plotdir = '_plots_2d_var_annular12'
+    plotdata.plotdir = '_plots_2d_var_annular13'
+
 
 
 

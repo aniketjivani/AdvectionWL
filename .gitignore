@@ -1,6 +1,13 @@
 *~
 _output
 _plots
+_output*
+_plots_*
 *.log
 .ipynb_checkpoints/
 __pycache__/
+interp_inlet
+true_inlet
+true_sim
+Intensities_Sim*/
+Intensities_CR2161_*/
